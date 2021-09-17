@@ -1,16 +1,13 @@
 import React, { createRef } from "react";
 
-interface Pixel {
-	x: number;
-	y: number;
-	color: number;
-}
-
+/**
+ * State held by the tile editor.
+ */
 interface State {
 	offsetX: number;
 	offsetY: number;
 	scale: number;
-	pixels: Pixel[];
+	pixels: number[];
 }
 
 /**
@@ -85,13 +82,63 @@ export class SelkieTileEditor extends React.Component<
 
 	handleCanvasClick(ev: MouseEvent): void {
 		let { clientX: x, clientY: y } = ev;
-		x = Math.floor(x / this.state.scale);
-		y = Math.floor(y / this.state.scale);
-		// check the pixel does not already exist
-		if (this.state.pixels.find((pixel) => pixel.x === x && pixel.y === y)) {
-			return;
-		}
-		this.setState({ pixels: this.state.pixels.concat({ x, y, color: 0xff0000 }) });
+		[x, y] = this.canvasToPixel(x, y);
+		this.setPixel(x, y, 0xff0000);
+	}
+
+	/**
+	 * Convert an (x, y) coordinate into a pixel array index.
+	 * @param size The size of the tile in pixels
+	 * @param x The x coordinate
+	 * @param y The y coordinate
+	 * @returns
+	 */
+	pixelToIndex(x: number, y: number): number {
+		return x + y * this.props.tileSize;
+	}
+
+	/**
+	 * Convert a pixel array index into an (x, y) coordinate.
+	 * @param index The index of the pixel
+	 */
+	indexToPixel(index: number): [number, number] {
+		return [index % this.props.tileSize, Math.floor(index / this.props.tileSize)];
+	}
+
+	/**
+	 * Convert an (x, y) pixel coordinate into an (x, y) canvas coordinate.
+	 * @param x The x coordinate
+	 * @param y The y coordinate
+	 * @returns
+	 */
+	pixelToCanvas(x: number, y: number): [number, number] {
+		return [x * this.state.scale + this.state.offsetX, y * this.state.scale + this.state.offsetY];
+	}
+
+	/**
+	 * Convert an (x, y) canvas coordinate into an (x, y) pixel coordinate.
+	 * @param x The x coordinate
+	 * @param y The y coordinate
+	 * @returns
+	 */
+	canvasToPixel(x: number, y: number): [number, number] {
+		return [(x - this.state.offsetX) / this.state.scale, (y - this.state.offsetY) / this.state.scale];
+	}
+
+	/**
+	 * Set the color of the pixel at the target coordinates.
+	 * @param x The x coordinate
+	 * @param y The y coordinate
+	 * @param color The new pixel color
+	 */
+	setPixel(x: number, y: number, color: number): void {
+		// floor to sensible values
+		x = Math.floor(x);
+		y = Math.floor(y);
+		// get pixel and update state
+		const index = this.pixelToIndex(x, y);
+		this.state.pixels[index] = color;
+		this.setState({ pixels: this.state.pixels });
 	}
 
 	/**
@@ -100,7 +147,7 @@ export class SelkieTileEditor extends React.Component<
 	 */
 	handleCanvasPan(ev: WheelEvent): void {
 		const { deltaX, deltaY } = ev;
-		this.setState({ offsetX: this.state.offsetX + deltaX * 0.1, offsetY: this.state.offsetY + deltaY * 0.1 });
+		this.setState({ offsetX: this.state.offsetX + deltaX * -0.5, offsetY: this.state.offsetY + deltaY * -0.5 });
 	}
 
 	componentDidMount(): void {
@@ -119,20 +166,16 @@ export class SelkieTileEditor extends React.Component<
 	 * @param y2
 	 */
 	drawLine(x1: number, y1: number, x2: number, y2: number) {
-		const canvasX1 = clamp(x1 * this.state.scale + this.state.offsetX, 0, this.canvas.width);
-		const canvasY1 = clamp(y1 * this.state.scale + this.state.offsetY, 0, this.canvas.height);
-		const canvasX2 = clamp(x2 * this.state.scale + this.state.offsetX, 0, this.canvas.width);
-		const canvasY2 = clamp(y2 * this.state.scale + this.state.offsetY, 0, this.canvas.height);
+		const [x1c, y1c] = this.pixelToCanvas(x1, y1);
+		const [x2c, y2c] = this.pixelToCanvas(x2, y2);
 		// perform culling
-		if (canvasX1 === canvasX2 && canvasY1 === canvasY2) {
+		if (x1c === x2c && y1c === y2c) {
 			return;
 		}
-
-		console.log("draw");
 		// draw the line
 		this.ctx.beginPath();
-		this.ctx.moveTo(canvasX1, canvasY1);
-		this.ctx.lineTo(canvasX2, canvasY2);
+		this.ctx.moveTo(x1c, y1c);
+		this.ctx.lineTo(x2c, y2c);
 		this.ctx.stroke();
 	}
 
@@ -141,18 +184,17 @@ export class SelkieTileEditor extends React.Component<
 	 */
 	protected renderCanvas(): void {
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-		for (const pixel of this.state.pixels) {
-			this.ctx.beginPath();
-			this.ctx.rect(
-				pixel.x * this.state.scale + this.state.offsetX,
-				pixel.y * this.state.scale + this.state.offsetY,
-				this.state.scale,
-				this.state.scale
-			);
-			this.ctx.fillStyle = `#${pixel.color.toString(16)}`;
-			this.ctx.fill();
+		// iterate over pixel arrays and draw each pixel
+		for (let i = 0; i < this.state.pixels.length; i++) {
+			const [x, y] = this.pixelToCanvas(...this.indexToPixel(i));
+			const color = this.state.pixels[i];
+			if (color === undefined) {
+				continue;
+			}
+			this.ctx.fillStyle = `#${color.toString(16)}`;
+			this.ctx.fillRect(x, y, this.state.scale, this.state.scale);
 		}
+		this.ctx.fill();
 
 		// draw the grid
 		this.ctx.beginPath();
@@ -161,8 +203,7 @@ export class SelkieTileEditor extends React.Component<
 		}
 
 		for (let y = 0; y < this.props.tileSize; y++) {
-			this.ctx.moveTo(0 + this.state.offsetY, y);
-			this.ctx.lineTo(this.canvas.width, y);
+			this.drawLine(0, y, this.props.tileSize - 1, y);
 		}
 		this.ctx.stroke();
 	}

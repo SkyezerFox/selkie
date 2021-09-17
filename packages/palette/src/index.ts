@@ -3,7 +3,7 @@ import { Tile } from "@selkie/tiles";
 /**
  * A tile contained within a palette.
  */
-interface PaletteTile {
+export interface PaletteTile {
 	tile: Tile;
 	x: number;
 	y: number;
@@ -12,7 +12,7 @@ interface PaletteTile {
 /**
  * A palette of tiles.
  */
-interface Palette {
+export interface Palette {
 	/**
 	 * The name of this palette.
 	 */
