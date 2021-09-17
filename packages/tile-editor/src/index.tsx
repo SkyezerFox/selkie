@@ -82,7 +82,8 @@ export class SelkieTileEditor extends React.Component<
 
 	handleCanvasClick(ev: MouseEvent): void {
 		let { clientX: x, clientY: y } = ev;
-		[x, y] = this.canvasToPixel(x, y);
+		// subtract the offset of the canvas in the DOM
+		[x, y] = this.canvasToPixel(x - this.canvas.offsetLeft, y - this.canvas.offsetTop);
 		this.setPixel(x, y, 0xff0000);
 	}
 
@@ -146,6 +147,7 @@ export class SelkieTileEditor extends React.Component<
 	 * @param ev
 	 */
 	handleCanvasPan(ev: WheelEvent): void {
+		ev.preventDefault();
 		const { deltaX, deltaY } = ev;
 		this.setState({ offsetX: this.state.offsetX + deltaX * -0.5, offsetY: this.state.offsetY + deltaY * -0.5 });
 	}
